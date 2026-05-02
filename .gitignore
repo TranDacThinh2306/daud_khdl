@@ -31,6 +31,7 @@ data/raw/*.json
 data/processed/*.csv
 data/processed/*.pkl
 data/external/
+data/raw
 
 # Model artifacts
 models_saved/experiments/
