@@ -1,0 +1,54 @@
+# Model hyperparameter configuration
+
+default_model: "random_forest"
+
+models:
+  random_forest:
+    n_estimators: 200
+    max_depth: null
+    min_samples_split: 5
+    min_samples_leaf: 2
+    class_weight: "balanced"
+
+  svm:
+    kernel: "rbf"
+    C: 1.0
+    gamma: "scale"
+    class_weight: "balanced"
+    probability: true
+
+  xgboost:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    scale_pos_weight: 1.0
+
+  lstm:
+    vocab_size: 30000
+    embedding_dim: 300
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.3
+    bidirectional: true
+    batch_size: 32
+    epochs: 10
+    learning_rate: 0.001
+
+  bert:
+    model_name: "bert-base-uncased"
+    num_labels: 2
+    dropout: 0.1
+    freeze_base: false
+    batch_size: 16
+    epochs: 5
+    learning_rate: 0.00002
+    max_length: 128
+
+# Hyperparameter tuning
+tuning:
+  method: "grid_search"  # grid_search, random_search, bayesian
+  cv_folds: 3
+  scoring: "f1"
+  n_iter: 50  # for random search

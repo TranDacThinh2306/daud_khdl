@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: depression_xai_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models_saved:/app/models_saved
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - MODEL_PATH=/app/models_saved/production/best_model.pkl
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: depression_xai_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./models_saved/experiments:/mlflow/experiments
+    command: >
+      mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/experiments --host 0.0.0.0 --port 5000
+    restart: unless-stopped

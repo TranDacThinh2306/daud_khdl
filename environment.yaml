@@ -1,0 +1,46 @@
+name: depression_xai
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+
+dependencies:
+  - python
+  - numpy
+  - pandas
+  - scikit-learn
+  - scipy
+  - nltk
+  - spacy
+  - gensim
+  - xgboost
+  - matplotlib
+  - seaborn
+  - plotly
+  - jupyter
+  - ipykernel
+  - pyyaml
+  - pytest
+  - tqdm
+  - joblib
+  - pip:
+      - torch
+      - transformers
+      - tokenizers
+      - sentencepiece
+      - shap
+      - lime
+      - fastapi
+      - uvicorn
+      - pydantic
+      - mlflow
+      - tweepy
+      - nlpaug
+      - textaugment
+      - wordcloud
+      - python-dotenv
+      - click
+      - rich
+      - httpx
+      - pytest-cov
+      - pytest-asyncio

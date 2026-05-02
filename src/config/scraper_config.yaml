@@ -1,0 +1,26 @@
+# Proxy configuration
+proxy:
+  enabled: true
+  
+  # Tự động lấy proxy free từ internet
+  auto_fetch_free: true
+  
+  # Kiểm tra proxy ngay khi khởi tạo
+  check_on_start: true
+  
+  # Số lần fail tối đa trước khi đánh dấu proxy chết
+  max_failures: 3
+  
+  # Chiến lược xoay vòng: round_robin, random, fastest, least_used
+  rotation_strategy: fastest
+  
+  # Thời gian refresh proxy (phút)
+  refresh_interval_minutes: 30
+  
+  # Số lượng proxy tối thiểu cần duy trì
+  min_proxies: 5
+  
+  # Proxy tĩnh (tùy chọn, thay thế hoặc bổ sung)
+  static_proxies: []
+  #   - "http://user:pass@ip:port"
+  #   - "socks5://ip:port"

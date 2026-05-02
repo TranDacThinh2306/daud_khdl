@@ -1,0 +1,57 @@
+# General system configuration
+project:
+  name: "Depression XAI System"
+  version: "1.0.0"
+  description: "Explainable AI for depression detection in social media"
+
+# Data settings
+data:
+  raw_path: "data/raw/comments_raw.csv"
+  processed_path: "data/processed/cleaned_comments.csv"
+  features_path: "data/processed/features_extracted.pkl"
+  text_column: "text"
+  label_column: "label"
+  test_size: 0.2
+  val_size: 0.1
+  random_state: 42
+
+# Preprocessing
+preprocessing:
+  lowercase: true
+  remove_urls: true
+  remove_mentions: true
+  remove_hashtags: false
+  remove_emojis: false
+  expand_slang: true
+  remove_stopwords: false
+  min_length: 3
+  language: "english"
+
+# Feature extraction
+features:
+  text_method: "tfidf"  # tfidf, bow, glove
+  max_features: 5000
+  ngram_range: [1, 2]
+  embedding_dim: 300
+  glove_path: null
+  use_linguistic: true
+  use_behavioral: true
+
+# Training
+training:
+  n_folds: 5
+  scoring: "f1"
+  n_jobs: -1
+
+# API
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  log_level: "INFO"
+
+# Paths
+paths:
+  models_dir: "models_saved"
+  reports_dir: "reports"
+  figures_dir: "reports/figures"

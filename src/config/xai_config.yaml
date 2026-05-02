@@ -1,0 +1,43 @@
+# XAI (Explainability) configuration for SHAP/LIME
+
+# SHAP settings
+shap:
+  explainer_type: "auto"  # auto, tree, kernel, linear
+  max_background_samples: 100
+  n_samples: 500  # nsamples for KernelExplainer
+  feature_perturbation: "interventional"
+  check_additivity: false
+
+# LIME settings
+lime:
+  num_features: 10
+  num_samples: 5000
+  discretize_continuous: true
+  kernel_width: null  # auto-computed if null
+
+# Stability testing
+stability:
+  n_repeats: 5
+  noise_level: 0.01
+  jaccard_threshold: 0.7
+  correlation_threshold: 0.8
+
+# Visualization
+visualization:
+  output_dir: "reports/figures"
+  dpi: 150
+  figure_format: "png"
+  shap_summary:
+    max_display: 20
+    plot_type: "dot"
+  feature_importance:
+    top_k: 20
+    colormap: "viridis"
+
+# Report generation
+report:
+  output_path: "reports/xai_report.pdf"
+  include_shap_summary: true
+  include_lime_examples: true
+  include_stability_results: true
+  n_lime_examples: 10

@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files (large)
+data/raw/*.csv
+data/raw/*.json
+data/processed/*.csv
+data/processed/*.pkl
+data/external/
+
+# Model artifacts
+models_saved/experiments/
+models_saved/production/*.pkl
+*.pkl
+*.pt
+*.pth
+*.h5
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Reports (generated)
+reports/figures/*.png
+reports/figures/*.jpg
+reports/figures/lime_examples/
+reports/*.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yaml
+
+# Testing
+**/.pytest_cache/
+**/__pycache__/
+**/.cache/

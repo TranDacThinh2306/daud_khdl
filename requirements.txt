@@ -1,0 +1,67 @@
+# Core
+numpy
+pandas
+scikit-learn
+scipy
+
+# NLP
+nltk
+spacy
+gensim
+transformers
+tokenizers
+sentencepiece
+
+# Deep Learning
+--index-url https://download.pytorch.org/whl/cu130
+torch 
+torchvision
+
+# XGBoost
+# xgboost
+
+# Explainability
+shap
+lime
+
+# API
+fastapi
+uvicorn
+pydantic
+
+# Visualization
+matplotlib
+seaborn
+# plotly
+wordcloud
+
+# Data Collection
+bs4
+
+# Experiment Tracking
+mlflow
+
+# Configuration
+pyyaml
+python-dotenv
+
+# Testing
+pytest
+pytest-cov
+pytest-asyncio
+httpx
+
+# Utilities
+tqdm
+joblib
+click
+rich
+
+# Data Augmentation
+nlpaug
+textaugment
+
+# Jupyter
+jupyter
+ipykernel
+
