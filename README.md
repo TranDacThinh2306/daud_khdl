@@ -50,7 +50,7 @@ You can run the main functionalities using the Python scripts provided in the `s
 
 ```bash
 # Run model training and generate XAI explanations
-python -m scripts.run_explain.py --model_path models_saved/experiments --num_samples 50 --output_dir reports/figures
+python -m scripts.run_explain --model_path models_saved/experiments --num_samples 50 --output_dir reports/figures
 python -m scripts.run_explain --model_path models_saved/experiments --num_samples all --output_dir reports/figures
 # Note: num_samples all will take a lot of time
 
