@@ -44,3 +44,4 @@ dependencies:
       - httpx
       - pytest-cov
       - pytest-asyncio
+      - faiss-cpu
