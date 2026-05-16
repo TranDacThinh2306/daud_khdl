@@ -18,12 +18,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app.loader import (
     load_model, load_global_importance,
-    run_lime, run_shap_local, preprocess_input
+    run_lime, run_shap_local, preprocess_input,
+    preprocess_phq9_data, load_prototype_matcher, load_mentalbert,
+    run_prototype_matching, PHQ9_COLS,
 )
 
 # ── Paths (chỉnh nếu cần) ──
-MODEL_PATH = "models_saved/experiments"
-GLOBAL_IMP_JSON = "reports/figures/shap/global_importance.json"
+MODEL_PATH        = "models_saved/experiments"
+GLOBAL_IMP_JSON   = "reports/figures/shap/global_importance.json"
+MENTALBERT_PATH   = "models_saved/mentalbert_phq9_finetuned"
 
 # ══════════════════════════════════════════════════
 # Config & Style
@@ -199,6 +202,18 @@ def get_model():
 @st.cache_resource(show_spinner="Đang tải SHAP global...")
 def get_global_importance():
     return load_global_importance(GLOBAL_IMP_JSON)
+
+@st.cache_resource(show_spinner="Đang tải dataset PHQ-9...")
+def get_phq9_df():
+    return preprocess_phq9_data(verbose=False)
+
+@st.cache_resource(show_spinner="Đang build FAISS index...")
+def get_matcher(_df):
+    return load_prototype_matcher(_df)
+
+@st.cache_resource(show_spinner="Đang tải MentalBERT...")
+def get_mentalbert():
+    return load_mentalbert(MENTALBERT_PATH)
 
 
 # ══════════════════════════════════════════════════
@@ -491,178 +506,305 @@ def merge_subword_shap(tokens_arr: list, values_arr: list, words_in_text: list) 
 # UI
 # ══════════════════════════════════════════════════
 st.markdown('<h1 style="font-family:IBM Plex Mono,monospace;font-size:32px;font-weight:500;text-align:center;margin-bottom:4px;">Phân tích nguy cơ trầm cảm</h1>', unsafe_allow_html=True)
-st.markdown('<p style="color:#888;font-size:13px;margin-bottom:20px;text-align:center;">Nhập đoạn văn bản — mô hình DistilBERT sẽ phân tích và giải thích dự đoán bằng LIME & SHAP.</p>', unsafe_allow_html=True)
+st.markdown('<p style="color:#888;font-size:13px;margin-bottom:20px;text-align:center;">Hệ thống phân tích và giải thích mức độ trầm cảm từ văn bản.</p>', unsafe_allow_html=True)
 
-# ── Input ──
-user_text = st.text_area(
-    label="Nhập văn bản",
-    placeholder="Nhập văn bản vào đây... (tiếng Anh)",
-    height=110,
-    label_visibility="collapsed"
-)
+tab1, tab2 = st.tabs(["🔬 Hướng 1 — SHAP & LIME", "🧩 Hướng 2 — RAG Prototype Matching"])
 
-col_btn, _ = st.columns([1, 5])
-with col_btn:
-    analyze = st.button("Phân tích →")
+with tab1:
+    st.markdown('<p style="color:#888;font-size:13px;margin-bottom:20px;">Nhập đoạn văn bản — mô hình DistilBERT sẽ phân tích và giải thích dự đoán bằng LIME & SHAP.</p>', unsafe_allow_html=True)
 
-st.divider()
+    # ── Input ──
+    user_text = st.text_area(
+        label="Nhập văn bản",
+        placeholder="Nhập văn bản vào đây... (tiếng Anh)",
+        height=110,
+        label_visibility="collapsed"
+    )
 
-# ── Load resources ──
-predictor, tokenizer, device = get_model()
-global_imp = get_global_importance()
+    col_btn, _ = st.columns([1, 5])
+    with col_btn:
+        analyze = st.button("Phân tích →")
 
-# ── PHẦN 1: LOGIC PHÂN TÍCH (Chỉ chạy khi bấm nút) ──
-if analyze:
-    text = user_text.strip()
-    if not text:
-        st.warning("Vui lòng nhập văn bản trước khi phân tích.")
-        st.stop()
+    st.divider()
 
-    # Tạo khung trạng thái để phản hồi ngay lập tức[cite: 3]
-    with st.status("Đang tiến hành phân tích chuyên sâu...", expanded=True) as status:
-        
-        st.write("Bước 1: Tiền xử lý văn bản...")
-        print("\n[LOG] Đang làm sạch dữ liệu...")
-        cleaned_text = preprocess_input(text) #[cite: 2, 5]
-        cleaned_text = cleaned_text.translate(str.maketrans('', '', string.punctuation))
+    # ── Load resources ──
+    predictor, tokenizer, device = get_model()
+    global_imp = get_global_importance()
 
+    # ── PHẦN 1: LOGIC PHÂN TÍCH (Chỉ chạy khi bấm nút) ──
+    if analyze:
+        text = user_text.strip()
+        if not text:
+            st.warning("Vui lòng nhập văn bản trước khi phân tích.")
+            st.stop()
 
-        st.write("Bước 2: Mô hình DistilBERT đang dự đoán...")
-        print("[LOG] Đang chạy mô hình dự đoán...")
-        probs = predictor.predict_proba([cleaned_text])[0] #[cite: 1, 5]
-        
-        # Tính toán các thông số để hiển thị
-        dep_prob   = float(probs[1])
-        non_prob   = float(probs[0])
-        is_dep     = dep_prob >= 0.5
-        label      = "Depression" if is_dep else "Non-depression"
-        confidence = dep_prob if is_dep else non_prob
-        card_cls   = "result-dep" if is_dep else "result-non"
-        label_cls  = "dep-color"  if is_dep else "non-color"
-        icon       = "🔴" if is_dep else "🟢"
+        # Tạo khung trạng thái để phản hồi ngay lập tức
+        with st.status("Đang tiến hành phân tích chuyên sâu...", expanded=True) as status:
 
-        st.write("Bước 3: Đang tính toán giải thích LIME...")
-        print("[LOG] Đang chạy LIME (1000 samples)...")
-        # Tính toán LIME một lần duy nhất và lưu vào biến[cite: 2, 5]
-        lime_exp = run_lime(predictor, cleaned_text, num_features=10, num_samples=1000) 
+            st.write("Bước 1: Tiền xử lý văn bản...")
+            print("\n[LOG] Đang làm sạch dữ liệu...")
+            cleaned_text = preprocess_input(text)
+            cleaned_text = cleaned_text.translate(str.maketrans('', '', string.punctuation))
 
-        st.write("Bước 4: Đang tính toán giá trị SHAP local...")
-        print("[LOG] Đang chạy SHAP local...")
-        # Tính toán SHAP một lần duy nhất và lưu vào biến[cite: 2, 5]
-        shap_sv = run_shap_local(predictor, tokenizer, cleaned_text, max_evals=300)
-        
-        status.update(label="Phân tích hoàn tất!", state="complete", expanded=False)
+            st.write("Bước 2: Mô hình DistilBERT đang dự đoán...")
+            print("[LOG] Đang chạy mô hình dự đoán...")
+            probs = predictor.predict_proba([cleaned_text])[0]
 
-    # ── PHẦN 2: HIỂN THỊ KẾT QUẢ RA GIAO DIỆN ──
-    st.markdown("---")
-    if cleaned_text != text:
-        st.caption(f"📝 Text sau khi tiền xử lý: _{cleaned_text}_")
+            # Tính toán các thông số để hiển thị
+            dep_prob   = float(probs[1])
+            non_prob   = float(probs[0])
+            is_dep     = dep_prob >= 0.5
+            label      = "Depression" if is_dep else "Non-depression"
+            confidence = dep_prob if is_dep else non_prob
+            card_cls   = "result-dep" if is_dep else "result-non"
+            label_cls  = "dep-color"  if is_dep else "non-color"
+            icon       = "🔴" if is_dep else "🟢"
 
-    col_result, col_explain = st.columns([1, 2.5])
+            st.write("Bước 3: Đang tính toán giải thích LIME...")
+            print("[LOG] Đang chạy LIME (1000 samples)...")
+            lime_exp = run_lime(predictor, cleaned_text, num_features=10, num_samples=1000)
 
-    # --- Cột bên trái: Thẻ kết quả (Chỉ giữ 1 khối duy nhất) ---
-    with col_result:
-        st.markdown('<div class="section-label">Kết quả</div>', unsafe_allow_html=True)
-        conf_pct = round(confidence * 100)
-        dep_pct  = round(dep_prob * 100)
-        non_pct  = round(non_prob * 100)
-        st.markdown(f"""
-        <div class="result-card {card_cls}">
-            <div style="font-size:26px">{icon}</div>
-            <div class="big-label {label_cls}">{label}</div>
-            <div class="conf-text">{conf_pct}% tự tin</div>
-            <div style="font-size:12px;color:#aaa;margin-bottom:4px">Depression</div>
-            <div class="conf-bar-bg">
-                <div style="width:{dep_pct}%;height:6px;border-radius:4px;background:#C0392B"></div>
+            st.write("Bước 4: Đang tính toán giá trị SHAP local...")
+            print("[LOG] Đang chạy SHAP local...")
+            shap_sv = run_shap_local(predictor, tokenizer, cleaned_text, max_evals=300)
+
+            status.update(label="Phân tích hoàn tất!", state="complete", expanded=False)
+
+        # ── PHẦN 2: HIỂN THỊ KẾT QUẢ RA GIAO DIỆN ──
+        st.markdown("---")
+        if cleaned_text != text:
+            st.caption(f"📝 Text sau khi tiền xử lý: _{cleaned_text}_")
+
+        col_result, col_explain = st.columns([1, 2.5])
+
+        # --- Cột bên trái: Thẻ kết quả ---
+        with col_result:
+            st.markdown('<div class="section-label">Kết quả</div>', unsafe_allow_html=True)
+            conf_pct = round(confidence * 100)
+            dep_pct  = round(dep_prob * 100)
+            non_pct  = round(non_prob * 100)
+            st.markdown(f"""
+            <div class="result-card {card_cls}">
+                <div style="font-size:26px">{icon}</div>
+                <div class="big-label {label_cls}">{label}</div>
+                <div class="conf-text">{conf_pct}% tự tin</div>
+                <div style="font-size:12px;color:#aaa;margin-bottom:4px">Depression</div>
+                <div class="conf-bar-bg">
+                    <div style="width:{dep_pct}%;height:6px;border-radius:4px;background:#C0392B"></div>
+                </div>
+                <div style="font-size:12px;color:#C0392B;margin-bottom:8px">{dep_pct}%</div>
+                <div style="font-size:12px;color:#aaa;margin-bottom:4px">Non-depression</div>
+                <div class="conf-bar-bg">
+                    <div style="width:{non_pct}%;height:6px;border-radius:4px;background:#27AE60"></div>
+                </div>
+                <div style="font-size:12px;color:#27AE60">{non_pct}%</div>
             </div>
-            <div style="font-size:12px;color:#C0392B;margin-bottom:8px">{dep_pct}%</div>
-            <div style="font-size:12px;color:#aaa;margin-bottom:4px">Non-depression</div>
-            <div class="conf-bar-bg">
-                <div style="width:{non_pct}%;height:6px;border-radius:4px;background:#27AE60"></div>
+            """, unsafe_allow_html=True)
+
+        # --- Cột bên phải: LIME & SHAP local ---
+        with col_explain:
+            st.markdown('<div class="section-label">Giải thích cụ thể</div>', unsafe_allow_html=True)
+            col_lime, col_shap = st.columns(2)
+
+            # ── Hiển thị LIME ──
+            with col_lime:
+                st.markdown('<div class="explain-card">', unsafe_allow_html=True)
+                st.markdown('<div class="section-label">LIME — local</div>', unsafe_allow_html=True)
+
+                lime_feats = lime_exp.as_list(label=1)
+                lime_map = {w.lower(): v for w, v in lime_feats}
+                words_in_text = cleaned_text.split()
+
+                import sys
+                word_val_lime = []
+                for w in words_in_text:
+                    w_lower = w.lower()
+                    if w_lower in lime_map:
+                        word_val_lime.append((w, lime_map[w_lower]))
+                    else:
+                        w_stripped = w_lower.rstrip(".,!?;:")
+                        word_val_lime.append((w, lime_map.get(w_stripped, 0.0)))
+
+                print(f"[LIME] lime_map keys: {list(lime_map.keys())}", file=sys.stderr)
+                print(f"[LIME] word_val_lime: {word_val_lime}", file=sys.stderr)
+
+                st.markdown(render_highlight(word_val_lime), unsafe_allow_html=True)
+
+                fig_lime = plot_bar(lime_feats, "LIME — top từ")
+                if fig_lime:
+                    st.pyplot(fig_lime, width="stretch")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # ── Hiển thị SHAP local ──
+            with col_shap:
+                st.markdown('<div class="explain-card">', unsafe_allow_html=True)
+                st.markdown('<div class="section-label">SHAP local — waterfall</div>', unsafe_allow_html=True)
+
+                sv_dep = shap_sv[0, :, 'Depression']
+                tokens_arr = [str(t) for t in sv_dep.data]
+                values_arr = [float(v) for v in sv_dep.values]
+                baseline   = float(shap_sv.base_values[0, 1])
+
+                word_val_shap = merge_subword_shap(tokens_arr, values_arr, cleaned_text.split())
+
+                import sys
+                print(f"[SHAP] tokens_arr: {tokens_arr}", file=sys.stderr)
+                print(f"[SHAP] values_arr: {[round(v,4) for v in values_arr]}", file=sys.stderr)
+                print(f"[SHAP] word_val_shap: {word_val_shap}", file=sys.stderr)
+
+                st.markdown(render_highlight(word_val_shap), unsafe_allow_html=True)
+
+                fig_wf = plot_waterfall(
+                    tokens_arr, values_arr,
+                    baseline=baseline,
+                    final_score=dep_prob,
+                    title="SHAP waterfall"
+                )
+                if fig_wf:
+                    st.pyplot(fig_wf, width="stretch")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── PHẦN 3: PHÂN TÍCH TOÀN CỤC (Luôn hiện dưới cùng) ──
+    # Dùng cleaned_words để tra cứu cho chính xác với dữ liệu SHAP[cite: 6]
+
+    cleaned_input_words = (
+        [
+            re.sub(r'[^\w\s]', '', word)
+            for word in preprocess_input(user_text).split()
+        ]
+        if user_text.strip()
+        else []
+    )
+
+    html_content = render_global_panel(global_imp, cleaned_input_words)
+    st.html(f"""<div style="font-family:sans-serif;">{html_content}</div>""")
+
+
+with tab2:
+    st.markdown('<p style="color:#888;font-size:13px;margin-bottom:20px;">Nhập đoạn văn bản — hệ thống sẽ tìm các ca tương tự (RAG) và dự đoán mức độ trầm cảm bằng MentalBERT.</p>', unsafe_allow_html=True)
+
+    # ── Load resources Hướng 2 ──
+    phq9_df  = get_phq9_df()
+    matcher  = get_matcher(phq9_df)
+    mentalbert = get_mentalbert()
+
+    # ── Input ──
+    user_text_2 = st.text_area(
+        label="Nhập văn bản (Hướng 2)",
+        placeholder="Nhập văn bản vào đây... (tiếng Anh)",
+        height=110,
+        label_visibility="collapsed",
+        key="input_tab2",
+    )
+
+    col_btn2, _ = st.columns([1, 5])
+    with col_btn2:
+        analyze2 = st.button("Phân tích →", key="btn_tab2")
+
+    st.divider()
+
+    if analyze2:
+        text2 = user_text_2.strip()
+        if not text2:
+            st.warning("Vui lòng nhập văn bản trước khi phân tích.")
+            st.stop()
+
+        with st.status("Đang tiến hành phân tích...", expanded=True) as status2:
+            st.write("Bước 1: Tìm kiếm prototype tương tự (FAISS)...")
+            result = run_prototype_matching(phq9_df, matcher, text2, top_k=5)
+
+            st.write("Bước 2: MentalBERT đang phân loại mức độ trầm cảm...")
+            mb_result = mentalbert.predict(text2)
+
+            status2.update(label="Phân tích hoàn tất!", state="complete", expanded=False)
+
+        rag   = result["rag_result"]
+        phq_scores = result["phq_scores"]
+        protos = result["prototypes"]
+
+        st.markdown("---")
+
+        # ── Hàng trên: 2 thẻ kết quả ──
+        col_rag, col_mb = st.columns(2)
+
+        with col_rag:
+            sev = rag["severity"] if rag else "N/A"
+            score_norm = rag["normalized_score"] if rag else 0
+            avg_sim = rag["avg_similarity"] if rag else 0
+            is_dep_rag = sev in ("Moderate", "Moderately Severe", "Severe")
+            border_rag = "#C0392B" if is_dep_rag else "#27AE60"
+            st.markdown(f"""
+            <div class="result-card" style="border-left:4px solid {border_rag};">
+                <div class="section-label">RAG Prototype Matching</div>
+                <div class="big-label" style="color:{border_rag};margin:6px 0;">{sev}</div>
+                <div class="conf-text">Score: {score_norm:.2f} / 27</div>
+                <div style="font-size:12px;color:#aaa;">Avg similarity với top-5: {avg_sim:.3f}</div>
             </div>
-            <div style="font-size:12px;color:#27AE60">{non_pct}%</div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-    # --- Cột bên phải: LIME & SHAP local ---
-    with col_explain:
-        st.markdown('<div class="section-label">Giải thích cụ thể</div>', unsafe_allow_html=True)
-        col_lime, col_shap = st.columns(2)
+        with col_mb:
+            mb_sev  = mb_result["severity"]
+            mb_conf = mb_result["confidence"]
+            is_dep_mb = mb_sev in ("Moderate", "Moderately Severe", "Severe")
+            border_mb = "#C0392B" if is_dep_mb else "#27AE60"
+            conf_pct = round(mb_conf * 100)
+            st.markdown(f"""
+            <div class="result-card" style="border-left:4px solid {border_mb};">
+                <div class="section-label">MentalBERT (fine-tuned)</div>
+                <div class="big-label" style="color:{border_mb};margin:6px 0;">{mb_sev}</div>
+                <div class="conf-text">{conf_pct}% tự tin</div>
+                <div class="conf-bar-bg">
+                    <div style="width:{conf_pct}%;height:6px;border-radius:4px;background:{border_mb}"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # ── Hiển thị LIME ──
-        with col_lime:
-            st.markdown('<div class="explain-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-label">LIME — local</div>', unsafe_allow_html=True)
-            
-            # Sử dụng kết quả lime_exp đã tính ở trên, không tính lại
-            lime_feats = lime_exp.as_list(label=1)
-            lime_map = {w.lower(): v for w, v in lime_feats}
-            words_in_text = cleaned_text.split()
+        st.markdown("<br>", unsafe_allow_html=True)
 
-            # Match: thử trực tiếp, nếu không khớp thì strip punct cuối
-            import sys
-            word_val_lime = []
-            for w in words_in_text:
-                w_lower = w.lower()
-                if w_lower in lime_map:
-                    word_val_lime.append((w, lime_map[w_lower]))
-                else:
-                    w_stripped = w_lower.rstrip(".,!?;:")
-                    word_val_lime.append((w, lime_map.get(w_stripped, 0.0)))
+        # ── Hàng dưới: PHQ-9 scores + Prototypes ──
+        col_phq, col_proto = st.columns([1.2, 1])
 
-            print(f"[LIME] lime_map keys: {list(lime_map.keys())}", file=sys.stderr)
-            print(f"[LIME] word_val_lime: {word_val_lime}", file=sys.stderr)
+        with col_phq:
+            st.markdown('<div class="section-label">Mức độ đáp ứng từng triệu chứng PHQ-9</div>', unsafe_allow_html=True)
+            if phq_scores:
+                max_score = phq_scores[0][1] if phq_scores[0][1] > 0 else 1.0
+                rows = ""
+                for q, v in phq_scores:
+                    # Rút gọn tên câu hỏi
+                    label_short = q.replace("-", " ").replace("  ", " ")
+                    label_short = (label_short[:60] + "...") if len(label_short) > 60 else label_short
+                    pct = round(v / max_score * 100) if max_score > 0 else 0
+                    color = "#C0392B" if pct >= 50 else "#E67E22" if pct >= 25 else "#95A5A6"
+                    rows += f"""
+                    <div style="padding:7px 0;border-bottom:1px solid #F0EEE9;">
+                        <div style="font-size:12px;color:#555;margin-bottom:4px;">{label_short}</div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="flex:1;background:#F0EEE9;border-radius:3px;height:8px;">
+                                <div style="width:{pct}%;height:8px;border-radius:3px;background:{color};"></div>
+                            </div>
+                            <span style="font-family:monospace;font-size:12px;color:#888;width:42px;text-align:right;">{v:.2%}</span>
+                        </div>
+                    </div>"""
+                st.markdown(f'<div style="background:#fff;border:1px solid #E5E3DE;border-radius:10px;padding:16px;">{rows}</div>', unsafe_allow_html=True)
+            else:
+                st.info("Không tìm được prototype phù hợp.")
 
-            st.markdown(render_highlight(word_val_lime), unsafe_allow_html=True)
-
-            fig_lime = plot_bar(lime_feats, "LIME — top từ")
-            if fig_lime:
-                st.pyplot(fig_lime, width="stretch")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # ── Hiển thị SHAP local ──
-        with col_shap:
-            st.markdown('<div class="explain-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-label">SHAP local — waterfall</div>', unsafe_allow_html=True)
-            
-            # Sử dụng kết quả shap_sv đã tính ở trên, không tính lại[cite: 5]
-            sv_dep = shap_sv[0, :, 'Depression']
-            tokens_arr = [str(t) for t in sv_dep.data]
-            values_arr = [float(v) for v in sv_dep.values]
-            baseline   = float(shap_sv.base_values[0, 1])
-
-            # Gộp subword token → word level rồi mới highlight
-            word_val_shap = merge_subword_shap(tokens_arr, values_arr, cleaned_text.split())
-
-            # Debug log
-            import sys
-            print(f"[SHAP] tokens_arr: {tokens_arr}", file=sys.stderr)
-            print(f"[SHAP] values_arr: {[round(v,4) for v in values_arr]}", file=sys.stderr)
-            print(f"[SHAP] word_val_shap: {word_val_shap}", file=sys.stderr)
-
-            st.markdown(render_highlight(word_val_shap), unsafe_allow_html=True)
-
-            fig_wf = plot_waterfall(
-                tokens_arr, values_arr,
-                baseline=baseline,
-                final_score=dep_prob,
-                title="SHAP waterfall"
-            )
-            if fig_wf:
-                st.pyplot(fig_wf, width="stretch")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-# ── PHẦN 3: PHÂN TÍCH TOÀN CỤC (Luôn hiện dưới cùng) ──
-# Dùng cleaned_words để tra cứu cho chính xác với dữ liệu SHAP[cite: 6]
-
-cleaned_input_words = (
-    [
-        re.sub(r'[^\w\s]', '', word)
-        for word in preprocess_input(user_text).split()
-    ]
-    if user_text.strip()
-    else []
-)
-
-html_content = render_global_panel(global_imp, cleaned_input_words)
-st.html(f"""<div style="font-family:sans-serif;">{html_content}</div>""")
+        with col_proto:
+            st.markdown('<div class="section-label">Top-5 ca tương tự tìm được</div>', unsafe_allow_html=True)
+            if protos:
+                for p in protos:
+                    sim_pct = round(p["similarity"] * 100)
+                    sev_p = p["severity"]
+                    color_p = "#C0392B" if sev_p in ("Moderate", "Moderately Severe", "Severe") else "#27AE60"
+                    preview = p["text"][:120] + "..." if len(p["text"]) > 120 else p["text"]
+                    st.markdown(f"""
+                    <div style="background:#fff;border:1px solid #E5E3DE;border-radius:8px;padding:12px;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                            <span style="font-size:12px;font-weight:600;color:{color_p};">{sev_p}</span>
+                            <span style="font-family:monospace;font-size:12px;color:#888;">sim: {p['similarity']:.3f}</span>
+                        </div>
+                        <div style="font-size:12px;color:#555;line-height:1.5;">{preview}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Không tìm được prototype phù hợp.")
